@@ -61,7 +61,7 @@ canvas{display:block;width:100%;aspect-ratio:4/3;max-width:100%;touch-action:non
 <body>
 <div class="wrap">
   <div class="top">
-    <div class="title"><a class="back" href="../">← All games</a><h1>Juggle</h1><span id="lvinfo"></span></div>
+    <div class="title"><a class="back" href="../index.html">← All games</a><h1>Juggle</h1><span id="lvinfo"></span></div>
     <div class="levels" id="levels"></div>
   </div>
   <div class="stage">
@@ -94,7 +94,7 @@ function makeWorld(L){
   const hands=[0,1].map(h=>({h,x:side(h)*HAND_OUT,y:0,balls:[],flail:-1,buffer:false,deadline:null}));
   const balls=[];
   for(let i=0;i<L.n;i++){const h=i<Math.ceil(L.n/2)?0:1,b={id:i,state:'held',hand:h,since:-9,x:0,y:0,vx:0,vy:0};balls.push(b);hands[h].balls.push(b);}
-  return {L,t:0,hands,balls,catches:0,dropped:null,events:[]};
+  const w={L,t:0,hands,balls,catches:0,dropped:null,events:[]};placeHeld(w);return w;
 }
 function incoming(w,h){let best=null;for(const b of w.balls)if(b.state==='air'&&b.to===h&&(!best||b.t0+b.T<best.t0+best.T))best=b;return best;}
 function throwBall(w,h){
@@ -135,8 +135,9 @@ function step(w,dt){
       if(b.y<FLOOR+BALL_R){b.y=FLOOR+BALL_R;b.vy=Math.abs(b.vy)>.4?-b.vy*.45:0;b.vx*=.8;}
     }
   }
-  for(const H of w.hands)H.balls.forEach((b,i)=>{b.x=H.x+side(H.h)*i*0.09;b.y=H.y+BALL_R+i*0.05;});
+  placeHeld(w);
 }
+function placeHeld(w){for(const H of w.hands)H.balls.forEach((b,i)=>{b.x=H.x+side(H.h)*i*0.09;b.y=H.y+BALL_R+i*0.05;});}
 if(typeof module!=='undefined')module.exports={LEVELS,makeWorld,step,press,G};
 </script>
 
@@ -269,7 +270,7 @@ function render(now){
   text(`best ${best}`,W/2,96,15,'#9fb0bb',600);
   m.forEach((x,k)=>{const on=world.catches>=x,px=26+k*58;text('★',px+10,30,26,on?'#f2b84b':'#33475a');text(String(x),px+10,56,13,on?'#f2b84b':'#9fb0bb',600);});
   if(banner&&t-banner.t0<1.4){const u=t-banner.t0,sc=reduce?1:(u<.2?u/.2*1.2:1.2-.2*Math.min(1,(u-.2)/.2));g.save();g.globalAlpha=Math.min(1,(1.4-u)/.3);g.translate(W/2,150);g.scale(sc,sc);text(banner.txt,0,0,40,'#f2b84b');g.restore();}
-  if(mode==='ready'){text('Throw with F and J, or tap each side',W/2,H*.5,22,'#f3efe4',600);text(`Left arm starts with ${Math.ceil(L.n/2)}. Throw, then keep the rhythm.`,W/2,H*.5+30,15,'#9fb0bb',600);}
+  if(mode==='ready'){text('Throw with F and J, or tap each side',W/2,H*.3,22,'#f3efe4',600);text(`Left arm starts with ${Math.ceil(L.n/2)}. Throw, then keep the rhythm.`,W/2,H*.3+30,15,'#9fb0bb',600);}
 }
 let last=performance.now();
 function frame(now){
