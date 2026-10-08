@@ -88,7 +88,9 @@ canvas{display:block;width:100%;aspect-ratio:4/3;max-width:100%;touch-action:non
 const G=9.81,HAND_IN=0.10,HAND_OUT=0.30,FLOOR=-1.0,BALL_R=0.06,GRACE=0.12,FLAIL=0.22,EARLY=0.15;
 // beat = time between throws (alternating hands). Each hand holds a ball for one beat,
 // so airtime T = n*beat - dwell = (n-1)*beat, and apex above the hands = g*T^2/8.
-const LEVELS=[3,4,5,6,7].map((n,i)=>{const beat=[.36,.33,.30,.28,.26][i],T=(n-1)*beat;return {n,beat,T,dwell:beat,minDwell:.3*beat,apex:G*T*T/8};});
+// Every level keeps the 3-ball airtime (same height); more balls only shorten the beat.
+const AIR=0.72;
+const LEVELS=[3,4,5,6,7].map(n=>{const T=AIR,beat=T/(n-1);return {n,beat,T,dwell:beat,minDwell:.3*beat,apex:G*T*T/8};});
 const side=h=>h===0?-1:1;
 function makeWorld(L){
   const hands=[0,1].map(h=>({h,x:side(h)*HAND_OUT,y:0,balls:[],flail:-1,buffer:false,deadline:null}));
