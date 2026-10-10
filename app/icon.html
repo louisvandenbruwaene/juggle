@@ -1,0 +1,15 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Juggle icon</title>
+<style>html,body{margin:0;background:transparent}svg{display:block;width:1024px;height:1024px}</style></head>
+<body><div id="out"></div>
+<script>
+/* The Juggle app icon: a macOS-style rounded square (824px tile, 100px margin) drawn as SVG. */
+const tile=(bg,inner)=>`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024"><defs><clipPath id="c"><rect x="100" y="100" width="824" height="824" rx="185"/></clipPath>
+<linearGradient id="sh" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".18"/><stop offset=".5" stop-color="#fff" stop-opacity="0"/></linearGradient></defs>
+<g clip-path="url(#c)">${bg}${inner}<rect x="100" y="100" width="824" height="824" fill="url(#sh)"/></g></svg>`;
+const fill=(c1,c2)=>`<defs><linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${c1}"/><stop offset="1" stop-color="${c2}"/></linearGradient></defs><rect x="0" y="0" width="1024" height="1024" fill="url(#bg)"/>`;
+const ICON=tile(fill('#22344a','#0f1820'),`<path d="M320 660 Q512 150 704 660" stroke="#f2b84b" stroke-width="10" stroke-dasharray="8 26" fill="none" opacity=".6"/>
+    <circle cx="512" cy="330" r="74" fill="#3f8fe0"/><circle cx="378" cy="500" r="74" fill="#ec4a40"/><circle cx="646" cy="500" r="74" fill="#f3c63c"/>
+    ${[[-1],[1]].map(([s])=>`<g transform="translate(${512+s*190} 690)"><path d="M${s*150} 200 L${s*110} 80 L0 0" stroke="#0b1117" stroke-width="58" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M${s*150} 200 L${s*110} 80 L0 0" stroke="#b8c4cc" stroke-width="40" fill="none" stroke-linecap="round" stroke-linejoin="round"/><circle cx="${s*110}" cy="80" r="24" fill="#c9d3da" stroke="#0b1117" stroke-width="8"/><path d="M-70 -10 A70 70 0 0 0 70 -10 Z" fill="#f2b84b" stroke="#0b1117" stroke-width="10"/></g>`).join('')}`);
+document.getElementById('out').innerHTML=ICON;
+</script></body></html>
