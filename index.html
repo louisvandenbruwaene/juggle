@@ -47,6 +47,8 @@ canvas{display:block;width:100%;aspect-ratio:4/3;max-width:100%;touch-action:non
 .res h2{font-family:var(--f-display);font-size:28px;margin:0}
 .big{font-family:var(--f-display);font-size:52px;font-weight:700;line-height:1;font-variant-numeric:tabular-nums}
 .res p{margin:0;color:var(--muted)}
+#ovRhythm{font-family:var(--f-display);font-weight:600;color:var(--ink);font-variant-numeric:tabular-nums}
+#ovRhythm b{color:var(--accent)}
 .stars{display:flex;justify-content:center;gap:8px}
 .stars span{font-size:40px;line-height:1;color:var(--line)}
 .stars span.on{color:var(--accent);animation:pop .45s cubic-bezier(.3,1.6,.5,1) backwards}
@@ -69,6 +71,7 @@ canvas{display:block;width:100%;aspect-ratio:4/3;max-width:100%;touch-action:non
         <h2 id="ovTitle">Dropped</h2>
         <div class="big" id="ovCatches">0</div>
         <p id="ovSub"></p>
+        <p id="ovRhythm"></p>
         <div class="stars" id="ovStars"></div>
         <div class="row"><button class="primary" id="ovRetry">Again</button><button id="ovNext">Next</button></div>
       </div>
@@ -98,9 +101,9 @@ function makeWorld(L){
 }
 function incoming(w,h){let best=null;for(const b of w.balls)if(b.state==='air'&&b.to===h&&(!best||b.t0+b.T<best.t0+best.T))best=b;return best;}
 function throwBall(w,h){
-  const H=w.hands[h],b=H.balls.shift(),L=w.L,to=L.n%2?1-h:h,T=L.T,xt=side(to)*HAND_OUT;
+  const H=w.hands[h],b=H.balls.shift(),L=w.L,to=L.n%2?1-h:h,T=L.T,xt=side(to)*HAND_OUT,dev=b.since<0?null:w.t-b.since-L.dwell;
   Object.assign(b,{state:'air',to,t0:w.t,T,x0:H.x,y0:H.y,x:H.x,y:H.y,vx:(xt-H.x)/T,vy:(G*T*T/2-H.y)/T});
-  H.buffer=false;if(H.balls.length<=1)H.deadline=null;w.events.push({type:'throw',h});
+  H.buffer=false;if(H.balls.length<=1)H.deadline=null;w.events.push({type:'throw',h,dev});
 }
 function press(w,h){
   if(w.dropped!==null)return;
@@ -149,12 +152,15 @@ cv.width=W*DPR;cv.height=H*DPR;
 const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
 const COLORS=['#ec4a40','#f3c63c','#3f8fe0','#4bb56d','#f28a3a','#a06ddb','#f1eee6'];
 const DT=1/240;
-let li=0,world,mode='ready',acc=0,pops=[],banner=null,shownCatch=0,catchBump=0;
+let li=0,world,mode='ready',acc=0,pops=[],banner=null,shownCatch=0,catchBump=0,trails=[],rings=[],dropFlash=-9,rhythm=null;
 let save={best:{},unlocked:1,muted:false};
 try{save=Object.assign(save,JSON.parse(localStorage.getItem('juggle-save')||'{}'));}catch(e){}
 function persist(){try{localStorage.setItem('juggle-save',JSON.stringify(save));}catch(e){}}
 const marks=L=>[L.n,2*L.n,5*L.n];
 const markName=['Flash','Qualified','Run'];
+/* rhythm: each throw is graded by how far its hold was from one full beat */
+const GRADES=[['Perfect','#8fd47a'],['Good','#f3efe4'],['Early','#f2b84b'],['Late','#f2b84b']];
+function grade(dev,beat){const a=Math.abs(dev);return a<Math.max(.03,.15*beat)?0:a<Math.max(.07,.35*beat)?1:dev<0?2:3;}
 
 /* sound: tiny synth, starts on first input */
 let ac=null;
@@ -174,7 +180,7 @@ function buildLevels(){
     b.title=`${L.n} balls`;b.onclick=()=>load(i);el.appendChild(b);});
 }
 function load(i){li=i;const L=LEVELS[i];$('#lvinfo').textContent=`${L.n} balls · ${L.beat.toFixed(2)} s beat · apex ${(L.apex+1).toFixed(1)} m`;reset();buildLevels();}
-function reset(){world=makeWorld(LEVELS[li]);mode='ready';acc=0;pops=[];banner=null;shownCatch=0;$('#ov').hidden=true;}
+function reset(){world=makeWorld(LEVELS[li]);mode='ready';acc=0;pops=[];banner=null;shownCatch=0;trails=world.balls.map(()=>[]);rings=[];dropFlash=-9;rhythm=[0,0,0,0];$('#ov').hidden=true;}
 function hit(h){
   if(mode==='over')return;
   if(mode==='ready')mode='play';
@@ -190,6 +196,8 @@ function endRun(){
   $('#ovCatches').textContent=c;
   $('#ovSub').textContent=`catches · best ${Math.max(best,c)} · qualify at ${m[1]}`;
   $('#ovStars').innerHTML=m.map((x,k)=>`<span class="${k<st?'on':''}" title="${markName[k]}: ${x}" style="animation-delay:${.15+k*.18}s">★</span>`).join('');
+  const graded=rhythm.reduce((a,b)=>a+b,0);
+  $('#ovRhythm').innerHTML=graded?`Rhythm <b>${Math.round(100*rhythm[0]/graded)}%</b> perfect · ${rhythm[2]} early · ${rhythm[3]} late`:'';
   $('#ovNext').hidden=!(li+1<save.unlocked);
   $('#ov').hidden=false;
 }
@@ -260,8 +268,12 @@ function render(now){
   for(const Hd of world.hands){const inc=world.dropped===null?incoming(world,Hd.h):null;if(!inc)continue;const left=inc.t0+inc.T-world.t,u=Math.max(0,Math.min(1,left/(L.beat*2)));
     const x=c.ox+side(Hd.h)*HAND_OUT*c.s,y=c.oy;g.strokeStyle=COLORS[inc.id];g.globalAlpha=.25+.6*(1-u);g.lineWidth=3;g.beginPath();g.arc(x,y,ballR(c)+4+30*u,0,7);g.stroke();g.globalAlpha=1;}
   const r=ballR(c);
+  if(!reduce)world.balls.forEach((b,i)=>{const tr=trails[i];for(let k=1;k<tr.length;k++){g.globalAlpha=.22*k/tr.length;g.fillStyle=COLORS[b.id];g.beginPath();g.arc(c.ox+tr[k][0]*c.s,c.oy-tr[k][1]*c.s,r*(.45+.45*k/tr.length),0,7);g.fill();}g.globalAlpha=1;});
+  for(const q of rings){const u=(t-q.t0)/.3;if(u>1)continue;g.strokeStyle=q.col;g.globalAlpha=1-u;g.lineWidth=3;g.beginPath();g.arc(q.x,q.y,r+4+u*22,0,7);g.stroke();g.globalAlpha=1;}
   for(const b of world.balls)drawBall(c.ox+b.x*c.s,c.oy-b.y*c.s,r,COLORS[b.id]);
   for(const Hd of world.hands)if(Hd.flail>world.t){const [x,y]=[c.ox+Hd.x*c.s,c.oy-Hd.y*c.s];text('!',x,y-28,22,'#f07a6b');}
+  for(const q of pops){const u=(t-q.t0)/.7;if(u>1)continue;g.globalAlpha=Math.min(1,(1-u)*2.5);text(q.txt,q.x,q.y-20-u*26,q.size,q.col,700);g.globalAlpha=1;}
+  if(t-dropFlash<.35){g.fillStyle=`rgba(240,122,107,${.22*(1-(t-dropFlash)/.35)})`;g.fillRect(0,0,W,H);}
   // catch counter
   if(world.catches!==shownCatch){shownCatch=world.catches;catchBump=t;}
   const bump=reduce?1:1+.25*Math.max(0,1-(t-catchBump)/.18);
@@ -279,12 +291,18 @@ function frame(now){
     acc+=dt;
     while(acc>=DT){step(world,DT);acc-=DT;}
     for(const ev of world.events){
+      const c=cam(),hx=c.ox+side(ev.h??0)*HAND_OUT*c.s,hy=c.oy;
+      if(ev.type==='catch')rings.push({x:hx,y:hy,t0:now/1000,col:COLORS[world.hands[ev.h].balls.at(-1)?.id??0]});
+      if(ev.type==='throw'&&ev.dev!==null){const k=grade(ev.dev,LEVELS[li].beat);rhythm[k]++;pops=pops.filter(q=>q.h!==ev.h);pops.push({h:ev.h,txt:GRADES[k][0],col:GRADES[k][1],x:hx,y:hy-ballR(c)*2,t0:now/1000,size:k===0?22:18});}
+      if(ev.type==='drop')dropFlash=now/1000;
       if(ev.type==='catch'){tone(ev.h?660:520,.07,'triangle',.16);const m=marks(LEVELS[li]),k=m.indexOf(world.catches);if(k>=0){banner={txt:markName[k]+'!',t0:now/1000};[0,1,2].forEach(i=>setTimeout(()=>tone(660*[1,1.25,1.5][i],.18,'sine',.14),i*90));}}
       else if(ev.type==='throw')tone(ev.h?300:260,.05,'sine',.05,1.6);
       else if(ev.type==='flail')tone(140,.12,'square',.05);
       else if(ev.type==='drop')tone(110,.35,'sine',.3,.5);
     }
     world.events.length=0;
+    const tn=now/1000;pops=pops.filter(q=>tn-q.t0<.7);rings=rings.filter(q=>tn-q.t0<.3);
+    world.balls.forEach((b,i)=>{const tr=trails[i];if(b.state==='air'){tr.push([b.x,b.y]);if(tr.length>9)tr.shift();}else tr.length=0;});
     if(mode==='play'&&world.dropped!==null&&world.t-world.dropped>1.1)endRun();
   }
   render(now);
