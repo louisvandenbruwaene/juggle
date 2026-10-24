@@ -1,5 +1,11 @@
 # Juggle
 
+### ▶ [Play Juggle in your browser](https://louisvandenbruwaene.github.io/juggle/)
+
+No install, no account: open the link and play. Throw with F and J (or tap each side of the screen) and keep the rhythm.
+
+[![Juggle: the juggling robot with three balls](screenshot.png)](https://louisvandenbruwaene.github.io/juggle/)
+
 Juggle: 3 to 7 balls, real gravity, same height, faster beat each level. One self-contained HTML file, no build step: open [`index.html`](index.html).
 
 ## Play on this Mac
