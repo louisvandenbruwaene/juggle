@@ -25,7 +25,7 @@ body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:1
 .top{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px 16px}
 .title{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;min-width:0}
 h1{font-family:var(--f-display);font-weight:700;font-size:30px;margin:0;letter-spacing:-.01em}
-#lvinfo{font-family:var(--f-display);font-weight:500;font-size:16px;color:var(--muted);font-variant-numeric:tabular-nums}
+#levelInfo{font-family:var(--f-display);font-weight:500;font-size:16px;color:var(--muted);font-variant-numeric:tabular-nums}
 .levels{display:flex;gap:6px;flex-wrap:wrap}
 button{font-family:var(--f-display);font-size:16px;font-weight:600;border:0;border-radius:10px;padding:9px 14px;background:var(--panel2);color:var(--ink);cursor:pointer;box-shadow:0 3px 0 #0b1117;transition:transform .06s}
 button:hover:not(:disabled){filter:brightness(1.12)}
@@ -40,276 +40,499 @@ button.primary{background:var(--accent);color:#2a2008}
 canvas{display:block;width:100%;aspect-ratio:4/3;max-width:100%;touch-action:none;cursor:pointer;user-select:none;-webkit-user-select:none}
 .hands{display:grid;grid-template-columns:1fr auto 1fr;gap:10px;align-items:center}
 .hand{font-size:20px;padding:16px 10px;touch-action:none;user-select:none;-webkit-user-select:none}
-.hand kbd{font-family:var(--f-display);font-size:13px;color:var(--muted);margin-left:6px}
+.hand kbd,.res kbd{font-family:var(--f-display);font-size:13px;color:var(--muted);margin-left:6px}
+.res .primary kbd{color:#5a4510}
 .mid{display:flex;gap:6px}
 .overlay{position:absolute;inset:0;display:grid;place-items:center;background:rgba(10,15,20,.55);padding:16px}
 .res{background:var(--panel);border:2px solid var(--line);padding:20px 26px;border-radius:16px;text-align:center;display:grid;gap:10px;min-width:min(300px,100%)}
 .res h2{font-family:var(--f-display);font-size:28px;margin:0}
+.res h2.good{color:var(--good)}.res h2.bad{color:var(--bad)}
 .big{font-family:var(--f-display);font-size:52px;font-weight:700;line-height:1;font-variant-numeric:tabular-nums}
 .res p{margin:0;color:var(--muted)}
-#ovRhythm{font-family:var(--f-display);font-weight:600;color:var(--ink);font-variant-numeric:tabular-nums}
-#ovRhythm b{color:var(--accent)}
+#resultRhythm{font-family:var(--f-display);font-weight:600;color:var(--ink);font-variant-numeric:tabular-nums}
+#resultRhythm b{color:var(--accent)}
 .stars{display:flex;justify-content:center;gap:8px}
 .stars span{font-size:40px;line-height:1;color:var(--line)}
 .stars span.on{color:var(--accent);animation:pop .45s cubic-bezier(.3,1.6,.5,1) backwards}
 .res .row{display:flex;gap:8px;justify-content:center}
 @keyframes pop{0%{transform:scale(0) rotate(-40deg)}100%{transform:scale(1)}}
 @media (prefers-reduced-motion:reduce){.stars span.on{animation:none}}
-@media (max-width:520px){h1{font-size:24px}.hand{font-size:18px;padding:14px 6px}}
+@media (max-width:520px){h1{font-size:24px}.hand{font-size:18px;padding:14px 6px}
+  /* the stage is short on a phone: keep the whole result card, buttons included, inside it */
+  .overlay{padding:6px}.res{padding:8px 14px;gap:3px}.res h2{font-size:20px}.big{font-size:32px}
+  .res p{font-size:12px}.stars span{font-size:24px}.res button{padding:6px 12px;font-size:15px}}
 </style>
 </head>
 <body>
 <div class="wrap">
   <div class="top">
-    <div class="title"><h1>Juggle</h1><span id="lvinfo"></span></div>
+    <div class="title"><h1>Juggle</h1><span id="levelInfo"></span></div>
     <div class="levels" id="levels"></div>
   </div>
   <div class="stage">
     <canvas id="stage" width="800" height="600" aria-label="Juggling stage. Two robot arms throw with the left and right keys."></canvas>
-    <div class="overlay" id="ov" hidden>
+    <div class="overlay" id="result" hidden>
       <div class="res">
-        <h2 id="ovTitle">Dropped</h2>
-        <div class="big" id="ovCatches">0</div>
-        <p id="ovSub"></p>
-        <p id="ovRhythm"></p>
-        <div class="stars" id="ovStars"></div>
-        <div class="row"><button class="primary" id="ovRetry">Again</button><button id="ovNext">Next</button></div>
+        <h2 id="resultTitle">Dropped</h2>
+        <div class="big" id="resultCatches">0</div>
+        <p id="resultSub"></p>
+        <p id="resultRhythm"></p>
+        <div class="stars" id="resultStars"></div>
+        <div class="row"><button class="primary" id="resultAgain">Again<kbd>F J</kbd></button><button id="resultNext">Next</button></div>
       </div>
     </div>
   </div>
   <div class="hands">
-    <button class="hand" id="hL">Left<kbd>F</kbd></button>
-    <div class="mid"><button id="bMute" aria-label="Sound on">Sound on</button></div>
-    <button class="hand" id="hR">Right<kbd>J</kbd></button>
+    <button class="hand" id="leftHandButton">Left<kbd>F</kbd></button>
+    <div class="mid"><button id="muteButton" aria-label="Sound on">Sound on</button></div>
+    <button class="hand" id="rightHandButton">Right<kbd>J</kbd></button>
   </div>
 </div>
 
 <script id="sim">
-/* ---------- physics (SI units: metres, seconds) ---------- */
-const G=9.81,HAND_IN=0.10,HAND_OUT=0.30,FLOOR=-1.0,BALL_R=0.06,GRACE=0.12,FLAIL=0.22,EARLY=0.15;
-// beat = time between throws (alternating hands). Each hand holds a ball for one beat,
-// so airtime T = n*beat - dwell = (n-1)*beat, and apex above the hands = g*T^2/8.
-// Every level keeps the 3-ball airtime (same height); more balls only shorten the beat.
-const AIR=0.72;
-const LEVELS=[3,4,5,6,7].map(n=>{const T=AIR,beat=T/(n-1);return {n,beat,T,dwell:beat,minDwell:.3*beat,apex:G*T*T/8};});
-const side=h=>h===0?-1:1;
-function makeWorld(L){
-  const hands=[0,1].map(h=>({h,x:side(h)*HAND_OUT,y:0,balls:[],flail:-1,buffer:false,deadline:null}));
+/* =====================================================================
+   0. SETTINGS
+   Every number that shapes play or meaning lives here, so it can be
+   tuned in one place. Physics is in SI units (metres, seconds), with the
+   hands at height 0.
+   ===================================================================== */
+const SETTINGS={
+  // --- physics ---
+  gravity:9.81,
+  handInnerX:0.10,               // how far from the centre a hand carries a ball before throwing
+  handOuterX:0.30,               // how far from the centre a hand rests and catches
+  floorY:-1.0,                   // floor height (the hands are at 0)
+  ballRadius:0.06,
+  airtimeSeconds:0.72,           // every level throws to the 3-ball height; more balls only shorten the beat
+  ballCounts:[3,4,5,6,7],        // one level per entry; odd = cascade (hand to hand), even = fountain (same hand)
+
+  // --- forgiveness ---
+  holdingTwoGraceSeconds:0.12,   // a hand holding two balls must throw one within this, or one falls
+  flailSeconds:0.22,             // pressing an empty hand makes it flail this long; a ball landing then falls
+  earlyPressSeconds:0.15,        // pressing an empty hand this close before its catch queues the throw instead
+  minimumHoldBeats:0.3,          // a queued throw leaves no sooner than this share of a beat after its catch
+
+  // --- scoring ---
+  starCatchesPerBall:[1,2,5],    // star k needs this many catches per ball; the 2nd star unlocks the next level
+  starNames:['Flash','Qualified','Run'],
+  // a throw is graded by how far its hold was from one beat: within perfect -> Perfect, within good -> Good
+  perfectWindow:{beats:0.15,minimumSeconds:0.03},
+  goodWindow:{beats:0.35,minimumSeconds:0.07},
+  grades:[['Perfect','#8fd47a'],['Good','#f3efe4'],['Early','#f2b84b'],['Late','#f2b84b']],
+
+  // --- timing of the run ---
+  simulationStepSeconds:1/240,
+  longestFrameSeconds:0.05,      // a slow frame never advances the juggle by more than this
+  resultDelaySeconds:1.1,        // after a drop, wait this long before the result card
+  restartLockSeconds:0.4,        // F/J on the result card only restart after this, so a late mash is not a retry
+
+  // --- look and feel ---
+  ballColors:['#ec4a40','#f3c63c','#3f8fe0','#4bb56d','#f28a3a','#a06ddb','#f1eee6'],
+  smallestBallPixels:12,
+  trailLength:9,                 // remembered positions per ball in the air
+  gradePopSeconds:0.7,
+  catchRingSeconds:0.3,
+  dropFlashSeconds:0.35,
+  dropShakePixels:9,
+  dropShakeSeconds:0.3,
+  bannerSeconds:1.4,             // star banner ("Qualified!") on screen
+  armUpperLength:0.34, armLowerLength:0.30, shoulder:[0.42,-0.45],
+  colors:{ink:'#f3efe4',muted:'#9fb0bb',line:'#33475a',accent:'#f2b84b',good:'#8fd47a',bad:'#f07a6b',outline:'#0b1117'},
+};
+
+/* =====================================================================
+   1. JUGGLING SIMULATION
+   Pure physics, no drawing, so it also runs under node for tests.
+   A throw always flies for one airtime, so the player's press timing
+   alone decides when balls land. The beat is the time between throws
+   (alternating hands); a hand holds each ball for one beat, so the
+   airtime is (balls - 1) beats and the apex is gravity * airtime^2 / 8.
+   ===================================================================== */
+const sideSign=hand=>hand===0?-1:1;   // hand 0 is left (negative x)
+const LEVELS=SETTINGS.ballCounts.map(balls=>{
+  const airtime=SETTINGS.airtimeSeconds,beat=airtime/(balls-1);
+  return {balls,beat,airtime,holdSeconds:beat,minimumHoldSeconds:SETTINGS.minimumHoldBeats*beat,apex:SETTINGS.gravity*airtime*airtime/8};
+});
+
+/* A fresh world: the left hand starts with the larger half of the balls. */
+function makeWorld(level){
+  const hands=[0,1].map(index=>({index,x:sideSign(index)*SETTINGS.handOuterX,y:0,balls:[],flailUntil:-1,queued:false,dropDeadline:null}));
   const balls=[];
-  for(let i=0;i<L.n;i++){const h=i<Math.ceil(L.n/2)?0:1,b={id:i,state:'held',hand:h,since:-9,x:0,y:0,vx:0,vy:0};balls.push(b);hands[h].balls.push(b);}
-  const w={L,t:0,hands,balls,catches:0,dropped:null,events:[]};placeHeld(w);return w;
-}
-function incoming(w,h){let best=null;for(const b of w.balls)if(b.state==='air'&&b.to===h&&(!best||b.t0+b.T<best.t0+best.T))best=b;return best;}
-function throwBall(w,h){
-  const H=w.hands[h],b=H.balls.shift(),L=w.L,to=L.n%2?1-h:h,T=L.T,xt=side(to)*HAND_OUT,dev=b.since<0?null:w.t-b.since-L.dwell;
-  Object.assign(b,{state:'air',to,t0:w.t,T,x0:H.x,y0:H.y,x:H.x,y:H.y,vx:(xt-H.x)/T,vy:(G*T*T/2-H.y)/T});
-  H.buffer=false;if(H.balls.length<=1)H.deadline=null;w.events.push({type:'throw',h,dev});
-}
-function press(w,h){
-  if(w.dropped!==null)return;
-  const H=w.hands[h];
-  if(H.balls.length){if(w.t-H.balls[0].since>=w.L.minDwell)throwBall(w,h);else H.buffer=true;return;}
-  const inc=incoming(w,h);
-  if(inc&&inc.t0+inc.T-w.t<EARLY){H.buffer=true;return;}
-  H.flail=w.t+FLAIL;w.events.push({type:'flail',h});
-}
-function drop(w,b,vx){Object.assign(b,{state:'drop',vx,vy:1.2});if(w.dropped===null){w.dropped=w.t;w.events.push({type:'drop'});}}
-function step(w,dt){
-  w.t+=dt;const L=w.L;
-  for(const H of w.hands){
-    if(H.balls.length){const u=Math.min(1,Math.max(0,(w.t-H.balls[0].since)/L.dwell));H.x=side(H.h)*(HAND_OUT+(HAND_IN-HAND_OUT)*u);H.y=-0.07*Math.sin(Math.PI*u);}
-    else{const k=1-Math.exp(-14*dt);H.x+=(side(H.h)*HAND_OUT-H.x)*k;H.y+=(0-H.y)*k;}
-    if(H.flail>w.t)H.y+=0.06*Math.sin((H.flail-w.t)/FLAIL*Math.PI);
-    if(H.buffer&&H.balls.length&&w.t-H.balls[0].since>=L.minDwell&&w.dropped===null)throwBall(w,H.h);
-    if(H.deadline!==null&&w.t>=H.deadline){H.deadline=null;if(H.balls.length>1){const b=H.balls.pop();drop(w,b,side(H.h)*0.8);}}
+  for(let id=0;id<level.balls;id++){
+    const hand=id<Math.ceil(level.balls/2)?0:1,ball={id,state:'held',hand,caughtAt:-9,x:0,y:0,vx:0,vy:0};
+    balls.push(ball);hands[hand].balls.push(ball);
   }
-  for(const b of w.balls){
-    if(b.state==='air'){
-      const s=w.t-b.t0;
-      if(s>=b.T){
-        const H=w.hands[b.to];
-        if(H.flail>w.t){drop(w,b,side(b.to)*1.4);continue;}
-        b.state='held';b.hand=b.to;b.since=w.t;H.balls.push(b);
-        if(w.dropped===null){w.catches++;w.events.push({type:'catch',h:b.to});}
-        if(H.balls.length>1&&H.deadline===null)H.deadline=w.t+GRACE;
-      }else{b.x=b.x0+b.vx*s;b.y=b.y0+b.vy*s-G*s*s/2;}
-    }else if(b.state==='drop'){
-      b.vy-=G*dt;b.x+=b.vx*dt;b.y+=b.vy*dt;
-      if(b.y<FLOOR+BALL_R){b.y=FLOOR+BALL_R;b.vy=Math.abs(b.vy)>.4?-b.vy*.45:0;b.vx*=.8;}
+  const world={level,time:0,hands,balls,catches:0,droppedAt:null,lastThrow:null,events:[]};
+  placeHeldBalls(world);return world;
+}
+
+/* The ball in the air that lands in this hand soonest, or null. */
+function nextIncomingBall(world,hand){
+  let soonest=null;
+  for(const ball of world.balls)if(ball.state==='air'&&ball.toHand===hand&&(!soonest||ball.thrownAt+ball.airtime<soonest.thrownAt+soonest.airtime))soonest=ball;
+  return soonest;
+}
+
+/* Launch the oldest ball in this hand on a parabola that lands in the target hand after one airtime. */
+function throwBall(world,hand){
+  const handState=world.hands[hand],ball=handState.balls.shift(),level=world.level;
+  const toHand=level.balls%2?1-hand:hand,airtime=level.airtime,targetX=sideSign(toHand)*SETTINGS.handOuterX;
+  const holdDeviation=ball.caughtAt<0?null:world.time-ball.caughtAt-level.holdSeconds;   // null for a ball never caught yet
+  Object.assign(ball,{state:'air',toHand,thrownAt:world.time,airtime,x0:handState.x,y0:handState.y,x:handState.x,y:handState.y,
+    vx:(targetX-handState.x)/airtime,vy:(SETTINGS.gravity*airtime*airtime/2-handState.y)/airtime});
+  handState.queued=false;
+  if(handState.balls.length<=1)handState.dropDeadline=null;
+  world.lastThrow={hand,time:world.time};
+  world.events.push({type:'throw',hand,holdDeviation});
+}
+
+/* The player pressed a hand: throw, queue a throw, or flail at nothing. */
+function press(world,hand){
+  if(world.droppedAt!==null)return;
+  const handState=world.hands[hand];
+  if(handState.balls.length){
+    if(world.time-handState.balls[0].caughtAt>=world.level.minimumHoldSeconds)throwBall(world,hand);else handState.queued=true;
+    return;
+  }
+  const incoming=nextIncomingBall(world,hand);
+  if(incoming&&incoming.thrownAt+incoming.airtime-world.time<SETTINGS.earlyPressSeconds){handState.queued=true;return;}
+  handState.flailUntil=world.time+SETTINGS.flailSeconds;
+  world.events.push({type:'flail',hand});
+}
+
+/* A ball falls. The first fall ends the run; cause is 'early' (flailed) or 'late' (held two too long). */
+function dropBall(world,ball,vx,hand,cause){
+  Object.assign(ball,{state:'drop',vx,vy:1.2});
+  if(world.droppedAt===null){world.droppedAt=world.time;world.events.push({type:'drop',hand,cause});}
+}
+
+/* Advance the world by one fixed step. */
+function step(world,seconds){
+  world.time+=seconds;const level=world.level;
+  for(const handState of world.hands){
+    const side=sideSign(handState.index);
+    if(handState.balls.length){   // carry the held ball inward and dip, then back out to throw
+      const progress=Math.min(1,Math.max(0,(world.time-handState.balls[0].caughtAt)/level.holdSeconds));
+      handState.x=side*(SETTINGS.handOuterX+(SETTINGS.handInnerX-SETTINGS.handOuterX)*progress);
+      handState.y=-0.07*Math.sin(Math.PI*progress);
+    }else{                         // empty: ease back to the catch spot
+      const ease=1-Math.exp(-14*seconds);
+      handState.x+=(side*SETTINGS.handOuterX-handState.x)*ease;handState.y+=(0-handState.y)*ease;
+    }
+    if(handState.flailUntil>world.time)handState.y+=0.06*Math.sin((handState.flailUntil-world.time)/SETTINGS.flailSeconds*Math.PI);
+    if(handState.queued&&handState.balls.length&&world.time-handState.balls[0].caughtAt>=level.minimumHoldSeconds&&world.droppedAt===null)throwBall(world,handState.index);
+    if(handState.dropDeadline!==null&&world.time>=handState.dropDeadline){
+      handState.dropDeadline=null;
+      if(handState.balls.length>1)dropBall(world,handState.balls.pop(),side*0.8,handState.index,'late');
     }
   }
-  placeHeld(w);
+  for(const ball of world.balls){
+    if(ball.state==='air'){
+      const flown=world.time-ball.thrownAt;
+      if(flown>=ball.airtime){
+        const handState=world.hands[ball.toHand];
+        if(handState.flailUntil>world.time){dropBall(world,ball,sideSign(ball.toHand)*1.4,ball.toHand,'early');continue;}
+        ball.state='held';ball.hand=ball.toHand;ball.caughtAt=world.time;handState.balls.push(ball);
+        if(world.droppedAt===null){world.catches++;world.events.push({type:'catch',hand:ball.toHand});}
+        if(handState.balls.length>1&&handState.dropDeadline===null)handState.dropDeadline=world.time+SETTINGS.holdingTwoGraceSeconds;
+      }else{ball.x=ball.x0+ball.vx*flown;ball.y=ball.y0+ball.vy*flown-SETTINGS.gravity*flown*flown/2;}
+    }else if(ball.state==='drop'){   // free fall with a few damped bounces on the floor
+      ball.vy-=SETTINGS.gravity*seconds;ball.x+=ball.vx*seconds;ball.y+=ball.vy*seconds;
+      if(ball.y<SETTINGS.floorY+SETTINGS.ballRadius){ball.y=SETTINGS.floorY+SETTINGS.ballRadius;ball.vy=Math.abs(ball.vy)>.4?-ball.vy*.45:0;ball.vx*=.8;}
+    }
+  }
+  placeHeldBalls(world);
 }
-function placeHeld(w){for(const H of w.hands)H.balls.forEach((b,i)=>{b.x=H.x+side(H.h)*i*0.09;b.y=H.y+BALL_R+i*0.05;});}
-if(typeof module!=='undefined')module.exports={LEVELS,makeWorld,step,press,G};
+
+/* Held balls sit stacked in their hand's cup. */
+function placeHeldBalls(world){
+  for(const handState of world.hands)handState.balls.forEach((ball,stackIndex)=>{
+    ball.x=handState.x+sideSign(handState.index)*stackIndex*0.09;ball.y=handState.y+SETTINGS.ballRadius+stackIndex*0.05;
+  });
+}
+if(typeof module!=='undefined')module.exports={SETTINGS,LEVELS,makeWorld,step,press};
 </script>
 
 <script>
-/* ---------- game ---------- */
-const $=s=>document.querySelector(s);
-const cv=$('#stage'),g=cv.getContext('2d'),W=800,H=600,DPR=Math.min(2,window.devicePixelRatio||1);
-cv.width=W*DPR;cv.height=H*DPR;
-const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
-const COLORS=['#ec4a40','#f3c63c','#3f8fe0','#4bb56d','#f28a3a','#a06ddb','#f1eee6'];
-const DT=1/240;
-let li=0,world,mode='ready',acc=0,pops=[],banner=null,shownCatch=0,catchBump=0,trails=[],rings=[],dropFlash=-9,rhythm=null;
+/* =====================================================================
+   2. STATE AND SAVE
+   ===================================================================== */
+const $=selector=>document.querySelector(selector);
+const canvas=$('#stage'),ctx=canvas.getContext('2d'),WIDTH=800,HEIGHT=600,PIXEL_RATIO=Math.min(2,window.devicePixelRatio||1);
+canvas.width=WIDTH*PIXEL_RATIO;canvas.height=HEIGHT*PIXEL_RATIO;
+const reducedMotion=matchMedia('(prefers-reduced-motion: reduce)').matches;
+const COLORS=SETTINGS.colors;
+
+let levelIndex=0,world,mode='ready';   // mode: 'ready' (before the first throw), 'play', 'over'
+let stepBacklog=0,overSince=0;
+// visual effects, all in seconds of page time
+let gradePops=[],catchRings=[],trails=[],banner=null,shownCatches=0,catchBumpAt=0,dropAt=-9,rhythmCounts=null;
+
 let save={best:{},unlocked:1,muted:false};
-try{save=Object.assign(save,JSON.parse(localStorage.getItem('juggle-save')||'{}'));}catch(e){}
-function persist(){try{localStorage.setItem('juggle-save',JSON.stringify(save));}catch(e){}}
-const marks=L=>[L.n,2*L.n,5*L.n];
-const markName=['Flash','Qualified','Run'];
-/* rhythm: each throw is graded by how far its hold was from one full beat */
-const GRADES=[['Perfect','#8fd47a'],['Good','#f3efe4'],['Early','#f2b84b'],['Late','#f2b84b']];
-function grade(dev,beat){const a=Math.abs(dev);return a<Math.max(.03,.15*beat)?0:a<Math.max(.07,.35*beat)?1:dev<0?2:3;}
+try{save=Object.assign(save,JSON.parse(localStorage.getItem('juggle-save')||'{}'));}catch(error){}
+function persist(){try{localStorage.setItem('juggle-save',JSON.stringify(save));}catch(error){}}
 
-/* sound: tiny synth, starts on first input */
-let ac=null;
-function tone(f,dur,type='sine',vol=.18,slide=0){
-  if(save.muted)return;try{ac=ac||new (window.AudioContext||window.webkitAudioContext)();const o=ac.createOscillator(),v=ac.createGain(),t=ac.currentTime;
-  o.type=type;o.frequency.setValueAtTime(f,t);if(slide)o.frequency.exponentialRampToValueAtTime(f*slide,t+dur);
-  v.gain.setValueAtTime(vol,t);v.gain.exponentialRampToValueAtTime(.001,t+dur);o.connect(v).connect(ac.destination);o.start(t);o.stop(t+dur);}catch(e){}
-}
-function updateMute(){$('#bMute').textContent=save.muted?'Sound off':'Sound on';$('#bMute').setAttribute('aria-label',save.muted?'Sound off':'Sound on');}
-$('#bMute').onclick=()=>{save.muted=!save.muted;persist();updateMute();};
+const starMarks=level=>SETTINGS.starCatchesPerBall.map(perBall=>perBall*level.balls);
 
-function buildLevels(){
-  const el=$('#levels');el.innerHTML='';
-  LEVELS.forEach((L,i)=>{const b=document.createElement('button');const best=save.best[i]||0,st=marks(L).filter(m=>best>=m).length;
-    b.className='lv'+(i===li?' cur':'');b.disabled=i>=save.unlocked;
-    b.innerHTML=`<b>${L.n}</b><small>${i<save.unlocked?'★'.repeat(st)+'·'.repeat(3-st):'locked'}</small>`;
-    b.title=`${L.n} balls`;b.onclick=()=>load(i);el.appendChild(b);});
+/* Grade index into SETTINGS.grades: 0 Perfect, 1 Good, 2 Early, 3 Late. */
+function gradeThrow(deviation,beat){
+  const size=Math.abs(deviation),{perfectWindow,goodWindow}=SETTINGS;
+  if(size<Math.max(perfectWindow.minimumSeconds,perfectWindow.beats*beat))return 0;
+  if(size<Math.max(goodWindow.minimumSeconds,goodWindow.beats*beat))return 1;
+  return deviation<0?2:3;
 }
-function load(i){li=i;const L=LEVELS[i];$('#lvinfo').textContent=`${L.n} balls · ${L.beat.toFixed(2)} s beat · apex ${(L.apex+1).toFixed(1)} m`;reset();buildLevels();}
-function reset(){world=makeWorld(LEVELS[li]);mode='ready';acc=0;pops=[];banner=null;shownCatch=0;trails=world.balls.map(()=>[]);rings=[];dropFlash=-9;rhythm=[0,0,0,0];$('#ov').hidden=true;}
-function hit(h){
-  if(mode==='over')return;
-  if(mode==='ready')mode='play';
-  press(world,h);
+
+/* =====================================================================
+   3. SOUND: a tiny synth that starts on the first input
+   ===================================================================== */
+let audio=null;
+function tone(frequency,duration,type='sine',volume=.18,slide=0){
+  if(save.muted)return;
+  try{
+    audio=audio||new (window.AudioContext||window.webkitAudioContext)();
+    const oscillator=audio.createOscillator(),gain=audio.createGain(),now=audio.currentTime;
+    oscillator.type=type;oscillator.frequency.setValueAtTime(frequency,now);
+    if(slide)oscillator.frequency.exponentialRampToValueAtTime(frequency*slide,now+duration);
+    gain.gain.setValueAtTime(volume,now);gain.gain.exponentialRampToValueAtTime(.001,now+duration);
+    oscillator.connect(gain).connect(audio.destination);oscillator.start(now);oscillator.stop(now+duration);
+  }catch(error){}
 }
+function updateMuteButton(){const label=save.muted?'Sound off':'Sound on';$('#muteButton').textContent=label;$('#muteButton').setAttribute('aria-label',label);}
+$('#muteButton').onclick=()=>{save.muted=!save.muted;persist();updateMuteButton();};
+
+/* =====================================================================
+   4. LEVELS AND RESULTS
+   ===================================================================== */
+function buildLevelButtons(){
+  const strip=$('#levels');strip.innerHTML='';
+  LEVELS.forEach((level,index)=>{
+    const button=document.createElement('button'),best=save.best[index]||0,stars=starMarks(level).filter(mark=>best>=mark).length;
+    button.className='lv'+(index===levelIndex?' cur':'');button.disabled=index>=save.unlocked;
+    button.innerHTML=`<b>${level.balls}</b><small>${index<save.unlocked?'★'.repeat(stars)+'·'.repeat(3-stars):'locked'}</small>`;
+    button.title=`${level.balls} balls`;button.onclick=()=>loadLevel(index);strip.appendChild(button);
+  });
+}
+function loadLevel(index){
+  levelIndex=index;const level=LEVELS[index];
+  $('#levelInfo').textContent=`${level.balls} balls · ${level.beat.toFixed(2)} s beat · apex ${(level.apex+1).toFixed(1)} m`;
+  resetRun();buildLevelButtons();
+}
+function resetRun(){
+  world=makeWorld(LEVELS[levelIndex]);mode='ready';stepBacklog=0;
+  gradePops=[];catchRings=[];banner=null;shownCatches=0;trails=world.balls.map(()=>[]);dropAt=-9;rhythmCounts=[0,0,0,0];
+  $('#result').hidden=true;
+}
+/* Show the result card: title says what happened (qualified, new best, or why the ball fell). */
 function endRun(){
-  mode='over';const L=LEVELS[li],c=world.catches,best=save.best[li]||0,m=marks(L);
-  if(c>best)save.best[li]=c;
-  if(c>=m[1]&&save.unlocked<LEVELS.length&&save.unlocked<=li+1)save.unlocked=li+2;
-  persist();buildLevels();
-  const st=m.filter(x=>c>=x).length;
-  $('#ovTitle').textContent=c>=m[1]?'Qualified!':'Dropped';
-  $('#ovCatches').textContent=c;
-  $('#ovSub').textContent=`catches · best ${Math.max(best,c)} · qualify at ${m[1]}`;
-  $('#ovStars').innerHTML=m.map((x,k)=>`<span class="${k<st?'on':''}" title="${markName[k]}: ${x}" style="animation-delay:${.15+k*.18}s">★</span>`).join('');
-  const graded=rhythm.reduce((a,b)=>a+b,0);
-  $('#ovRhythm').innerHTML=graded?`Rhythm <b>${Math.round(100*rhythm[0]/graded)}%</b> perfect · ${rhythm[2]} early · ${rhythm[3]} late`:'';
-  $('#ovNext').hidden=!(li+1<save.unlocked);
-  $('#ov').hidden=false;
+  mode='over';overSince=performance.now()/1000;
+  const level=LEVELS[levelIndex],catches=world.catches,previousBest=save.best[levelIndex]||0,marks=starMarks(level);
+  if(catches>previousBest)save.best[levelIndex]=catches;
+  if(catches>=marks[1]&&save.unlocked<LEVELS.length&&save.unlocked<=levelIndex+1)save.unlocked=levelIndex+2;
+  persist();buildLevelButtons();
+  const stars=marks.filter(mark=>catches>=mark).length,qualifiedNow=catches>=marks[1]&&previousBest<marks[1],newBest=catches>previousBest&&previousBest>0;
+  const cause=world.dropCause==='early'?'Too early':'Too late';
+  const title=$('#resultTitle');
+  title.textContent=qualifiedNow?'Qualified!':newBest?'New best!':cause;
+  title.className=qualifiedNow||newBest?'good':'bad';
+  $('#resultCatches').textContent=catches;
+  $('#resultSub').textContent=`catches · best ${Math.max(previousBest,catches)} · qualify at ${marks[1]}`;
+  $('#resultStars').innerHTML=marks.map((mark,k)=>`<span class="${k<stars?'on':''}" title="${SETTINGS.starNames[k]}: ${mark}" style="animation-delay:${.15+k*.18}s">★</span>`).join('');
+  const graded=rhythmCounts.reduce((sum,count)=>sum+count,0);
+  $('#resultRhythm').innerHTML=graded?`Rhythm <b>${Math.round(100*rhythmCounts[0]/graded)}%</b> perfect · ${rhythmCounts[2]} early · ${rhythmCounts[3]} late`:'';
+  $('#resultNext').hidden=!(levelIndex+1<save.unlocked);
+  $('#result').hidden=false;
 }
 
-/* input: F/J (and friends), tap either half of the stage, or the two buttons */
-const KEYS={f:0,a:0,d:0,s:0,arrowleft:0,j:1,k:1,l:1,';':1,arrowright:1};
-addEventListener('keydown',e=>{
-  if(e.repeat||e.metaKey||e.ctrlKey||e.altKey)return;
-  const k=e.key.toLowerCase();
-  if(k in KEYS){e.preventDefault();hit(KEYS[k]);}
-  else if(k===' '||k==='enter'||k==='r'){if(mode==='over'||k==='r'){e.preventDefault();reset();}}
+/* =====================================================================
+   5. INPUT: F/J (and neighbours), tap either half of the stage, or the
+   two hand buttons. On the result card a hand key starts the next try.
+   ===================================================================== */
+const HAND_KEYS={f:0,a:0,d:0,s:0,arrowleft:0,j:1,k:1,l:1,';':1,arrowright:1};
+function pressHand(hand){
+  if(mode==='over'){if(performance.now()/1000-overSince>SETTINGS.restartLockSeconds)resetRun();return;}
+  if(mode==='ready')mode='play';
+  press(world,hand);
+}
+addEventListener('keydown',event=>{
+  if(event.repeat||event.metaKey||event.ctrlKey||event.altKey)return;
+  const key=event.key.toLowerCase();
+  if(key in HAND_KEYS){event.preventDefault();pressHand(HAND_KEYS[key]);}
+  else if(key===' '||key==='enter'||key==='r'){if(mode==='over'||key==='r'){event.preventDefault();resetRun();}}
 });
-cv.addEventListener('pointerdown',e=>{const r=cv.getBoundingClientRect();hit(e.clientX-r.left<r.width/2?0:1);});
-for(const [id,h] of [['#hL',0],['#hR',1]])$(id).addEventListener('pointerdown',e=>{e.preventDefault();hit(h);});
-$('#ovRetry').onclick=reset;$('#ovNext').onclick=()=>load(li+1);
+canvas.addEventListener('pointerdown',event=>{const box=canvas.getBoundingClientRect();pressHand(event.clientX-box.left<box.width/2?0:1);});
+for(const [id,hand] of [['#leftHandButton',0],['#rightHandButton',1]])$(id).addEventListener('pointerdown',event=>{event.preventDefault();pressHand(hand);});
+$('#resultAgain').onclick=resetRun;$('#resultNext').onclick=()=>loadLevel(levelIndex+1);
 
-/* drawing */
-function cam(){const L=LEVELS[li],s=(H-56)/(L.apex+1.0+0.42),oy=H-24-1.0*s;return {s,ox:W/2,oy};}
-function ballR(c){return Math.max(BALL_R*c.s,12);}
-/* two little robot arms on a base: shoulder joint, elbow solved with 2-link IK, cup gripper */
-const ARM1=.34,ARM2=.30,SHOULDER=[.42,-.45];
-function elbowFor(sx,hx,hy){
-  const S=[sx*SHOULDER[0],SHOULDER[1]],dx=hx-S[0],dy=hy-S[1],d=Math.min(ARM1+ARM2-1e-3,Math.hypot(dx,dy)),
-        th=Math.atan2(dy,dx),a=Math.acos(Math.max(-1,Math.min(1,(ARM1*ARM1+d*d-ARM2*ARM2)/(2*ARM1*d))));
-  const e1=[S[0]+ARM1*Math.cos(th+a),S[1]+ARM1*Math.sin(th+a)],e2=[S[0]+ARM1*Math.cos(th-a),S[1]+ARM1*Math.sin(th-a)];
-  return [S,sx*e1[0]>sx*e2[0]?e1:e2];
+/* =====================================================================
+   6. DRAWING
+   World metres map to canvas pixels through camera(): x right, y up,
+   scaled so the apex of the current level fits under the counter.
+   ===================================================================== */
+function camera(){const level=LEVELS[levelIndex],scale=(HEIGHT-56)/(level.apex+1.0+0.42);return {scale,originX:WIDTH/2,originY:HEIGHT-24-1.0*scale};}
+function ballPixels(view){return Math.max(SETTINGS.ballRadius*view.scale,SETTINGS.smallestBallPixels);}
+function handPixel(view,hand){return [view.originX+sideSign(hand)*SETTINGS.handOuterX*view.scale,view.originY];}
+
+/* Shoulder and elbow for an arm reaching the hand point (two-link inverse kinematics, elbow outward). */
+function armJoints(side,handX,handY){
+  const upper=SETTINGS.armUpperLength,lower=SETTINGS.armLowerLength,shoulder=[side*SETTINGS.shoulder[0],SETTINGS.shoulder[1]];
+  const dx=handX-shoulder[0],dy=handY-shoulder[1],reach=Math.min(upper+lower-1e-3,Math.hypot(dx,dy)),angle=Math.atan2(dy,dx);
+  const bend=Math.acos(Math.max(-1,Math.min(1,(upper*upper+reach*reach-lower*lower)/(2*upper*reach))));
+  const elbowA=[shoulder[0]+upper*Math.cos(angle+bend),shoulder[1]+upper*Math.sin(angle+bend)],elbowB=[shoulder[0]+upper*Math.cos(angle-bend),shoulder[1]+upper*Math.sin(angle-bend)];
+  return [shoulder,side*elbowA[0]>side*elbowB[0]?elbowA:elbowB];
 }
-function link(P,a,b,w,col){g.lineCap='round';g.strokeStyle='#0b1117';g.lineWidth=w+4;g.beginPath();g.moveTo(...P(...a));g.lineTo(...P(...b));g.stroke();g.strokeStyle=col;g.lineWidth=w;g.beginPath();g.moveTo(...P(...a));g.lineTo(...P(...b));g.stroke();}
-function joint(P,p,r){const [x,y]=P(...p);g.fillStyle='#0b1117';g.beginPath();g.arc(x,y,r+2,0,7);g.fill();g.fillStyle='#c9d3da';g.beginPath();g.arc(x,y,r,0,7);g.fill();g.fillStyle='#6d7d89';g.beginPath();g.arc(x,y,r*.4,0,7);g.fill();}
-function drawJuggler(c){
-  const P=(x,y)=>[c.ox+x*c.s,c.oy-y*c.s],px=m=>Math.max(3,m*c.s);
-  // base unit
-  const [bx,by]=P(-.55,-.40),bw=1.1*c.s,bh=(FLOOR+.40)*-c.s;
-  g.fillStyle='#0b1117';g.beginPath();g.roundRect(bx-2,by-2,bw+4,bh+4,px(.06));g.fill();
-  g.fillStyle='#3a4c5c';g.beginPath();g.roundRect(bx,by,bw,bh,px(.05));g.fill();
-  g.fillStyle='#2c3b48';g.fillRect(bx+px(.06),by+bh*.55,bw-px(.12),px(.05));
-  const lit=world.dropped===null?'#8fd47a':'#f07a6b';g.fillStyle=lit;g.beginPath();g.arc(c.ox,by+px(.12),px(.035),0,7);g.fill();
-  for(const Hd of world.hands){
-    const sx=side(Hd.h),[S,E]=elbowFor(sx,Hd.x,Hd.y-.03),Hp=[Hd.x,Hd.y-.03],busy=Hd.flail>world.t;
-    link(P,S,E,px(.075),'#9aa9b4');link(P,E,Hp,px(.06),'#b8c4cc');
-    joint(P,S,px(.05));joint(P,E,px(.04));
-    // cup gripper opening upward
-    const [hx,hy]=P(...Hp),r=Math.max(ballR(c)+3,px(.07));
-    g.fillStyle='#0b1117';g.beginPath();g.arc(hx,hy,r+3,0,Math.PI);g.fill();
-    g.fillStyle=busy?'#f07a6b':Hd.balls.length?'#f2b84b':'#7f8f9b';g.beginPath();g.arc(hx,hy,r,0,Math.PI);g.fill();
-    g.fillStyle='#0b1117';g.fillRect(hx-r-3,hy-2,2*r+6,4);
+function drawLink(toPixel,from,to,width,color){
+  ctx.lineCap='round';
+  for(const [lineWidth,stroke] of [[width+4,COLORS.outline],[width,color]]){ctx.strokeStyle=stroke;ctx.lineWidth=lineWidth;ctx.beginPath();ctx.moveTo(...toPixel(...from));ctx.lineTo(...toPixel(...to));ctx.stroke();}
+}
+function drawJoint(toPixel,point,radius){
+  const [x,y]=toPixel(...point);
+  for(const [r,fill] of [[radius+2,COLORS.outline],[radius,'#c9d3da'],[radius*.4,'#6d7d89']]){ctx.fillStyle=fill;ctx.beginPath();ctx.arc(x,y,r,0,7);ctx.fill();}
+}
+/* Robot base plus two arms with cup grippers; a cup is red while flailing, gold while holding. */
+function drawJuggler(view){
+  const toPixel=(x,y)=>[view.originX+x*view.scale,view.originY-y*view.scale],metresToPixels=metres=>Math.max(3,metres*view.scale);
+  const [baseX,baseY]=toPixel(-.55,-.40),baseWidth=1.1*view.scale,baseHeight=(SETTINGS.floorY+.40)*-view.scale;
+  ctx.fillStyle=COLORS.outline;ctx.beginPath();ctx.roundRect(baseX-2,baseY-2,baseWidth+4,baseHeight+4,metresToPixels(.06));ctx.fill();
+  ctx.fillStyle='#3a4c5c';ctx.beginPath();ctx.roundRect(baseX,baseY,baseWidth,baseHeight,metresToPixels(.05));ctx.fill();
+  ctx.fillStyle='#2c3b48';ctx.fillRect(baseX+metresToPixels(.06),baseY+baseHeight*.55,baseWidth-metresToPixels(.12),metresToPixels(.05));
+  ctx.fillStyle=world.droppedAt===null?COLORS.good:COLORS.bad;ctx.beginPath();ctx.arc(view.originX,baseY+metresToPixels(.12),metresToPixels(.035),0,7);ctx.fill();
+  for(const handState of world.hands){
+    const side=sideSign(handState.index),handPoint=[handState.x,handState.y-.03],[shoulder,elbow]=armJoints(side,...handPoint);
+    drawLink(toPixel,shoulder,elbow,metresToPixels(.075),'#9aa9b4');drawLink(toPixel,elbow,handPoint,metresToPixels(.06),'#b8c4cc');
+    drawJoint(toPixel,shoulder,metresToPixels(.05));drawJoint(toPixel,elbow,metresToPixels(.04));
+    const [cupX,cupY]=toPixel(...handPoint),cupRadius=Math.max(ballPixels(view)+3,metresToPixels(.07));
+    ctx.fillStyle=COLORS.outline;ctx.beginPath();ctx.arc(cupX,cupY,cupRadius+3,0,Math.PI);ctx.fill();
+    ctx.fillStyle=handState.flailUntil>world.time?COLORS.bad:handState.balls.length?COLORS.accent:'#7f8f9b';ctx.beginPath();ctx.arc(cupX,cupY,cupRadius,0,Math.PI);ctx.fill();
+    ctx.fillStyle=COLORS.outline;ctx.fillRect(cupX-cupRadius-3,cupY-2,2*cupRadius+6,4);
   }
 }
-function drawBall(x,y,r,col){
-  g.fillStyle='rgba(0,0,0,.25)';g.beginPath();g.arc(x+r*.15,y+r*.2,r,0,7);g.fill();
-  g.fillStyle=col;g.beginPath();g.arc(x,y,r,0,7);g.fill();
-  g.fillStyle='rgba(255,255,255,.35)';g.beginPath();g.arc(x-r*.35,y-r*.35,r*.35,0,7);g.fill();
+function drawBall(x,y,radius,color){
+  ctx.fillStyle='rgba(0,0,0,.25)';ctx.beginPath();ctx.arc(x+radius*.15,y+radius*.2,radius,0,7);ctx.fill();
+  ctx.fillStyle=color;ctx.beginPath();ctx.arc(x,y,radius,0,7);ctx.fill();
+  ctx.fillStyle='rgba(255,255,255,.35)';ctx.beginPath();ctx.arc(x-radius*.35,y-radius*.35,radius*.35,0,7);ctx.fill();
 }
-function text(t,x,y,size,col,weight=700,align='center'){g.font=`${weight} ${size}px Fredoka, system-ui, sans-serif`;g.textAlign=align;g.textBaseline='middle';g.lineWidth=Math.max(3,size/7);g.strokeStyle='rgba(8,12,16,.7)';g.strokeText(t,x,y);g.fillStyle=col;g.fillText(t,x,y);}
-function render(now){
-  const t=now/1000,c=cam(),L=LEVELS[li];
-  g.setTransform(DPR,0,0,DPR,0,0);
-  g.fillStyle='#0f1820';g.fillRect(0,0,W,H);
-  const sp=g.createRadialGradient(W/2,c.oy,10,W/2,c.oy,H*.95);sp.addColorStop(0,'rgba(243,226,180,.20)');sp.addColorStop(1,'rgba(243,226,180,0)');g.fillStyle=sp;g.fillRect(0,0,W,H);
-  const fy=c.oy-FLOOR*c.s;g.fillStyle='#2a241d';g.fillRect(0,fy,W,H-fy);g.fillStyle='#3a3127';g.fillRect(0,fy,W,3);
-  // height ruler from the floor, in metres
-  g.strokeStyle='#33475a';g.lineWidth=2;g.beginPath();g.moveTo(W-44,fy);g.lineTo(W-44,20);g.stroke();
-  for(let m=0;m<=Math.floor(L.apex+1.2);m++){const y=fy-m*c.s;if(y<20)break;g.beginPath();g.moveTo(W-52,y);g.lineTo(W-36,y);g.stroke();text(`${m} m`,W-58,y,13,'#9fb0bb',600,'right');}
-  const ay=c.oy-L.apex*c.s;g.setLineDash([6,8]);g.strokeStyle='rgba(242,184,75,.35)';g.beginPath();g.moveTo(60,ay);g.lineTo(W-60,ay);g.stroke();g.setLineDash([]);
-  text(`apex ${(L.apex+1).toFixed(2)} m`,64,ay-12,13,'#f2b84b',600,'left');
-  drawJuggler(c);
-  // incoming cue: a ring that closes onto the hand as the next ball arrives
-  for(const Hd of world.hands){const inc=world.dropped===null?incoming(world,Hd.h):null;if(!inc)continue;const left=inc.t0+inc.T-world.t,u=Math.max(0,Math.min(1,left/(L.beat*2)));
-    const x=c.ox+side(Hd.h)*HAND_OUT*c.s,y=c.oy;g.strokeStyle=COLORS[inc.id];g.globalAlpha=.25+.6*(1-u);g.lineWidth=3;g.beginPath();g.arc(x,y,ballR(c)+4+30*u,0,7);g.stroke();g.globalAlpha=1;}
-  const r=ballR(c);
-  if(!reduce)world.balls.forEach((b,i)=>{const tr=trails[i];for(let k=1;k<tr.length;k++){g.globalAlpha=.22*k/tr.length;g.fillStyle=COLORS[b.id];g.beginPath();g.arc(c.ox+tr[k][0]*c.s,c.oy-tr[k][1]*c.s,r*(.45+.45*k/tr.length),0,7);g.fill();}g.globalAlpha=1;});
-  for(const q of rings){const u=(t-q.t0)/.3;if(u>1)continue;g.strokeStyle=q.col;g.globalAlpha=1-u;g.lineWidth=3;g.beginPath();g.arc(q.x,q.y,r+4+u*22,0,7);g.stroke();g.globalAlpha=1;}
-  for(const b of world.balls)drawBall(c.ox+b.x*c.s,c.oy-b.y*c.s,r,COLORS[b.id]);
-  for(const Hd of world.hands)if(Hd.flail>world.t){const [x,y]=[c.ox+Hd.x*c.s,c.oy-Hd.y*c.s];text('!',x,y-28,22,'#f07a6b');}
-  for(const q of pops){const u=(t-q.t0)/.7;if(u>1)continue;g.globalAlpha=Math.min(1,(1-u)*2.5);text(q.txt,q.x,q.y-20-u*26,q.size,q.col,700);g.globalAlpha=1;}
-  if(t-dropFlash<.35){g.fillStyle=`rgba(240,122,107,${.22*(1-(t-dropFlash)/.35)})`;g.fillRect(0,0,W,H);}
-  // catch counter
-  if(world.catches!==shownCatch){shownCatch=world.catches;catchBump=t;}
-  const bump=reduce?1:1+.25*Math.max(0,1-(t-catchBump)/.18);
-  g.save();g.translate(W/2,56);g.scale(bump,bump);text(String(world.catches),0,0,56,'#f3efe4');g.restore();
-  const m=marks(L),best=save.best[li]||0;
-  text(`best ${best}`,W/2,96,15,'#9fb0bb',600);
-  m.forEach((x,k)=>{const on=world.catches>=x,px=26+k*58;text('★',px+10,30,26,on?'#f2b84b':'#33475a');text(String(x),px+10,56,13,on?'#f2b84b':'#9fb0bb',600);});
-  if(banner&&t-banner.t0<1.4){const u=t-banner.t0,sc=reduce?1:(u<.2?u/.2*1.2:1.2-.2*Math.min(1,(u-.2)/.2));g.save();g.globalAlpha=Math.min(1,(1.4-u)/.3);g.translate(W/2,150);g.scale(sc,sc);text(banner.txt,0,0,40,'#f2b84b');g.restore();}
-  if(mode==='ready'){text('Throw with F and J, or tap each side',W/2,H*.3,22,'#f3efe4',600);text(`Left arm starts with ${Math.ceil(L.n/2)}. Throw, then keep the rhythm.`,W/2,H*.3+30,15,'#9fb0bb',600);}
+function drawText(string,x,y,size,color,weight=700,align='center'){
+  ctx.font=`${weight} ${size}px Fredoka, system-ui, sans-serif`;ctx.textAlign=align;ctx.textBaseline='middle';
+  ctx.lineWidth=Math.max(3,size/7);ctx.strokeStyle='rgba(8,12,16,.7)';ctx.strokeText(string,x,y);ctx.fillStyle=color;ctx.fillText(string,x,y);
 }
-let last=performance.now();
-function frame(now){
-  const dt=Math.min(.05,(now-last)/1000);last=now;
-  if(mode!=='ready'){
-    acc+=dt;
-    while(acc>=DT){step(world,DT);acc-=DT;}
-    for(const ev of world.events){
-      const c=cam(),hx=c.ox+side(ev.h??0)*HAND_OUT*c.s,hy=c.oy;
-      if(ev.type==='catch')rings.push({x:hx,y:hy,t0:now/1000,col:COLORS[world.hands[ev.h].balls.at(-1)?.id??0]});
-      if(ev.type==='throw'&&ev.dev!==null){const k=grade(ev.dev,LEVELS[li].beat);rhythm[k]++;pops=pops.filter(q=>q.h!==ev.h);pops.push({h:ev.h,txt:GRADES[k][0],col:GRADES[k][1],x:hx,y:hy-ballR(c)*2,t0:now/1000,size:k===0?22:18});}
-      if(ev.type==='drop')dropFlash=now/1000;
-      if(ev.type==='catch'){tone(ev.h?660:520,.07,'triangle',.16);const m=marks(LEVELS[li]),k=m.indexOf(world.catches);if(k>=0){banner={txt:markName[k]+'!',t0:now/1000};[0,1,2].forEach(i=>setTimeout(()=>tone(660*[1,1.25,1.5][i],.18,'sine',.14),i*90));}}
-      else if(ev.type==='throw')tone(ev.h?300:260,.05,'sine',.05,1.6);
-      else if(ev.type==='flail')tone(140,.12,'square',.05);
-      else if(ev.type==='drop')tone(110,.35,'sine',.3,.5);
+/* Throw cue: a ring round the ball the next hand should throw fills over one beat, and turns green in the Perfect window. */
+function drawThrowCue(view,level,now){
+  let hand,progress,inPerfectWindow=false;
+  if(mode==='ready'){hand=0;progress=.5+.5*Math.sin(now*6);}
+  else if(mode==='play'&&world.droppedAt===null&&world.lastThrow){
+    hand=1-world.lastThrow.hand;
+    const sinceThrow=world.time-world.lastThrow.time;
+    progress=Math.min(1,sinceThrow/level.beat);
+    inPerfectWindow=gradeThrow(sinceThrow-level.beat,level.beat)===0;
+  }else return;
+  const ball=world.hands[hand].balls[0];
+  if(!ball)return;   // nothing to throw yet
+  const x=view.originX+ball.x*view.scale,y=view.originY-ball.y*view.scale,radius=ballPixels(view)+7;
+  ctx.lineCap='round';ctx.lineWidth=4;
+  ctx.strokeStyle='rgba(255,255,255,.12)';ctx.beginPath();ctx.arc(x,y,radius,0,7);ctx.stroke();
+  ctx.strokeStyle=inPerfectWindow?COLORS.good:COLORS.accent;ctx.globalAlpha=.5+.5*progress;
+  ctx.beginPath();ctx.arc(x,y,radius,-Math.PI/2,-Math.PI/2+2*Math.PI*progress);ctx.stroke();ctx.globalAlpha=1;
+}
+function render(nowMs){
+  const now=nowMs/1000,view=camera(),level=LEVELS[levelIndex];
+  ctx.setTransform(PIXEL_RATIO,0,0,PIXEL_RATIO,0,0);
+  ctx.fillStyle='#0f1820';ctx.fillRect(0,0,WIDTH,HEIGHT);
+  const shake=reducedMotion?0:SETTINGS.dropShakePixels*Math.max(0,1-(now-dropAt)/SETTINGS.dropShakeSeconds);
+  if(shake)ctx.translate((Math.random()-.5)*2*shake,(Math.random()-.5)*2*shake);
+  const spotlight=ctx.createRadialGradient(WIDTH/2,view.originY,10,WIDTH/2,view.originY,HEIGHT*.95);
+  spotlight.addColorStop(0,'rgba(243,226,180,.20)');spotlight.addColorStop(1,'rgba(243,226,180,0)');ctx.fillStyle=spotlight;ctx.fillRect(-20,-20,WIDTH+40,HEIGHT+40);
+  const floorPixel=view.originY-SETTINGS.floorY*view.scale;
+  ctx.fillStyle='#2a241d';ctx.fillRect(-20,floorPixel,WIDTH+40,HEIGHT-floorPixel+20);ctx.fillStyle='#3a3127';ctx.fillRect(-20,floorPixel,WIDTH+40,3);
+  // height ruler from the floor, in metres, and the apex line
+  ctx.strokeStyle=COLORS.line;ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(WIDTH-44,floorPixel);ctx.lineTo(WIDTH-44,20);ctx.stroke();
+  for(let metre=0;metre<=Math.floor(level.apex+1.2);metre++){
+    const y=floorPixel-metre*view.scale;if(y<20)break;
+    ctx.beginPath();ctx.moveTo(WIDTH-52,y);ctx.lineTo(WIDTH-36,y);ctx.stroke();drawText(`${metre} m`,WIDTH-58,y,13,COLORS.muted,600,'right');
+  }
+  const apexPixel=view.originY-level.apex*view.scale;
+  ctx.setLineDash([6,8]);ctx.strokeStyle='rgba(242,184,75,.35)';ctx.beginPath();ctx.moveTo(60,apexPixel);ctx.lineTo(WIDTH-60,apexPixel);ctx.stroke();ctx.setLineDash([]);
+  drawText(`apex ${(level.apex+1).toFixed(2)} m`,64,apexPixel-12,13,COLORS.accent,600,'left');
+  drawJuggler(view);
+  // catch cue: a ring in the ball's colour closes onto the hand as the next ball arrives
+  for(const handState of world.hands){
+    const incoming=world.droppedAt===null?nextIncomingBall(world,handState.index):null;if(!incoming)continue;
+    const secondsLeft=incoming.thrownAt+incoming.airtime-world.time,closing=Math.max(0,Math.min(1,secondsLeft/(level.beat*2))),[x,y]=handPixel(view,handState.index);
+    ctx.strokeStyle=SETTINGS.ballColors[incoming.id];ctx.globalAlpha=.25+.6*(1-closing);ctx.lineWidth=3;ctx.beginPath();ctx.arc(x,y,ballPixels(view)+4+30*closing,0,7);ctx.stroke();ctx.globalAlpha=1;
+  }
+  const radius=ballPixels(view);
+  if(!reducedMotion)world.balls.forEach((ball,index)=>{
+    const trail=trails[index];
+    for(let k=1;k<trail.length;k++){ctx.globalAlpha=.22*k/trail.length;ctx.fillStyle=SETTINGS.ballColors[ball.id];ctx.beginPath();ctx.arc(view.originX+trail[k][0]*view.scale,view.originY-trail[k][1]*view.scale,radius*(.45+.45*k/trail.length),0,7);ctx.fill();}
+    ctx.globalAlpha=1;
+  });
+  for(const ring of catchRings){const age=(now-ring.at)/SETTINGS.catchRingSeconds;if(age>1)continue;ctx.strokeStyle=ring.color;ctx.globalAlpha=1-age;ctx.lineWidth=3;ctx.beginPath();ctx.arc(ring.x,ring.y,radius+4+age*22,0,7);ctx.stroke();ctx.globalAlpha=1;}
+  for(const ball of world.balls)drawBall(view.originX+ball.x*view.scale,view.originY-ball.y*view.scale,radius,SETTINGS.ballColors[ball.id]);
+  drawThrowCue(view,level,now);
+  for(const handState of world.hands)if(handState.flailUntil>world.time)drawText('!',view.originX+handState.x*view.scale,view.originY-handState.y*view.scale-28,22,COLORS.bad);
+  for(const pop of gradePops){const age=(now-pop.at)/SETTINGS.gradePopSeconds;if(age>1)continue;ctx.globalAlpha=Math.min(1,(1-age)*2.5);drawText(pop.text,pop.x,pop.y-20-age*26,pop.size,pop.color,700);ctx.globalAlpha=1;}
+  if(now-dropAt<SETTINGS.dropFlashSeconds){ctx.fillStyle=`rgba(240,122,107,${.22*(1-(now-dropAt)/SETTINGS.dropFlashSeconds)})`;ctx.fillRect(-20,-20,WIDTH+40,HEIGHT+40);}
+  ctx.setTransform(PIXEL_RATIO,0,0,PIXEL_RATIO,0,0);
+  // catch counter with a bump on every catch, best below, star marks top left
+  if(world.catches!==shownCatches){shownCatches=world.catches;catchBumpAt=now;}
+  const bump=reducedMotion?1:1+.25*Math.max(0,1-(now-catchBumpAt)/.18);
+  ctx.save();ctx.translate(WIDTH/2,56);ctx.scale(bump,bump);drawText(String(world.catches),0,0,56,COLORS.ink);ctx.restore();
+  const marks=starMarks(level),best=save.best[levelIndex]||0;
+  drawText(`best ${best}`,WIDTH/2,96,15,COLORS.muted,600);
+  marks.forEach((mark,k)=>{const reached=world.catches>=mark,x=36+k*58;drawText('★',x,30,26,reached?COLORS.accent:COLORS.line);drawText(String(mark),x,56,13,reached?COLORS.accent:COLORS.muted,600);});
+  if(banner&&now-banner.at<SETTINGS.bannerSeconds){
+    const age=now-banner.at,scale=reducedMotion?1:(age<.2?age/.2*1.2:1.2-.2*Math.min(1,(age-.2)/.2));
+    ctx.save();ctx.globalAlpha=Math.min(1,(SETTINGS.bannerSeconds-age)/.3);ctx.translate(WIDTH/2,150);ctx.scale(scale,scale);drawText(banner.text,0,0,40,COLORS.accent);ctx.restore();
+  }
+  if(mode==='ready')drawText('F   ·   J',WIDTH/2,HEIGHT*.3,30,COLORS.ink,600);
+}
+
+/* =====================================================================
+   7. MAIN LOOP: fixed-step simulation, then turn sim events into
+   effects and sounds, then draw.
+   ===================================================================== */
+function handleEvent(event,now){
+  const view=camera(),level=LEVELS[levelIndex],[handX,handY]=handPixel(view,event.hand??0);
+  if(event.type==='catch'){
+    catchRings.push({x:handX,y:handY,at:now,color:SETTINGS.ballColors[world.hands[event.hand].balls.at(-1)?.id??0]});
+    tone(event.hand?660:520,.07,'triangle',.16);
+    const markIndex=starMarks(level).indexOf(world.catches);
+    if(markIndex>=0){banner={text:SETTINGS.starNames[markIndex]+'!',at:now};[1,1.25,1.5].forEach((ratio,i)=>setTimeout(()=>tone(660*ratio,.18,'sine',.14),i*90));}
+  }else if(event.type==='throw'){
+    if(event.holdDeviation!==null){
+      const grade=gradeThrow(event.holdDeviation,level.beat);rhythmCounts[grade]++;
+      gradePops=gradePops.filter(pop=>pop.hand!==event.hand);
+      gradePops.push({hand:event.hand,text:SETTINGS.grades[grade][0],color:SETTINGS.grades[grade][1],x:handX,y:handY-ballPixels(view)*2,at:now,size:grade===0?22:18});
     }
-    world.events.length=0;
-    const tn=now/1000;pops=pops.filter(q=>tn-q.t0<.7);rings=rings.filter(q=>tn-q.t0<.3);
-    world.balls.forEach((b,i)=>{const tr=trails[i];if(b.state==='air'){tr.push([b.x,b.y]);if(tr.length>9)tr.shift();}else tr.length=0;});
-    if(mode==='play'&&world.dropped!==null&&world.t-world.dropped>1.1)endRun();
+    tone(event.hand?300:260,.05,'sine',.05,1.6);
+  }else if(event.type==='flail')tone(140,.12,'square',.05);
+  else if(event.type==='drop'){
+    dropAt=now;world.dropCause=event.cause;
+    gradePops=gradePops.filter(pop=>pop.hand!==event.hand);
+    gradePops.push({hand:event.hand,text:event.cause==='early'?'Too early':'Too late',color:COLORS.bad,x:handX,y:handY-ballPixels(view)*2,at:now,size:24});
+    tone(110,.35,'sine',.3,.5);
   }
-  render(now);
+}
+let lastFrameMs=performance.now();
+function frame(nowMs){
+  const seconds=Math.min(SETTINGS.longestFrameSeconds,(nowMs-lastFrameMs)/1000),now=nowMs/1000;lastFrameMs=nowMs;
+  if(mode!=='ready'){
+    stepBacklog+=seconds;
+    while(stepBacklog>=SETTINGS.simulationStepSeconds){step(world,SETTINGS.simulationStepSeconds);stepBacklog-=SETTINGS.simulationStepSeconds;}
+    for(const event of world.events)handleEvent(event,now);
+    world.events.length=0;
+    gradePops=gradePops.filter(pop=>now-pop.at<SETTINGS.gradePopSeconds);catchRings=catchRings.filter(ring=>now-ring.at<SETTINGS.catchRingSeconds);
+    world.balls.forEach((ball,index)=>{const trail=trails[index];if(ball.state==='air'){trail.push([ball.x,ball.y]);if(trail.length>SETTINGS.trailLength)trail.shift();}else trail.length=0;});
+    if(mode==='play'&&world.droppedAt!==null&&world.time-world.droppedAt>SETTINGS.resultDelaySeconds)endRun();
+  }
+  render(nowMs);
   requestAnimationFrame(frame);
 }
-updateMute();
-li=Math.min(save.unlocked-1,LEVELS.length-1);load(li);
+
+/* =====================================================================
+   8. START
+   ===================================================================== */
+updateMuteButton();
+loadLevel(Math.min(save.unlocked-1,LEVELS.length-1));
 requestAnimationFrame(frame);
 </script>
 </body>
